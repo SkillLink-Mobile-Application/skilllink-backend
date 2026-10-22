@@ -31,3 +31,12 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Firebase Service Account
+/firebase/firebase-service-account.json
+
+# Firebase credentials
+firebase/firebase-service-account.json
+
+# Uploaded user images
+uploads/profile-images/

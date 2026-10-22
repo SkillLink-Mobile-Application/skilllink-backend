@@ -26,6 +26,11 @@ public class User {
     private String phone;
     private String profileImage;
 
+    // ==================== Firebase FCM Token ====================
+
+    @Column(length = 500)
+    private String fcmToken;
+
     /*
      * This field is used only to receive the role
      * from the registration request.
@@ -104,6 +109,16 @@ public class User {
 
     public void setProfileImage(String profileImage) {
         this.profileImage = profileImage;
+    }
+
+    // ==================== FCM Token Get/Set ====================
+
+    public String getFcmToken() {
+        return fcmToken;
+    }
+
+    public void setFcmToken(String fcmToken) {
+        this.fcmToken = fcmToken;
     }
 
     public Role getRole() {

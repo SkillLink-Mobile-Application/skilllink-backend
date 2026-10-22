@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import com.skilllink.service.FirebaseMessagingService;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -22,13 +23,16 @@ public class ChatController {
 
     private final ChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
+    private final FirebaseMessagingService firebaseMessagingService;
 
     public ChatController(
             ChatMessageRepository chatMessageRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            FirebaseMessagingService firebaseMessagingService
     ) {
         this.chatMessageRepository = chatMessageRepository;
         this.userRepository = userRepository;
+        this.firebaseMessagingService = firebaseMessagingService;
     }
 
     // ==================== Send Message ====================
@@ -76,6 +80,24 @@ public class ChatController {
 
         ChatMessage savedMessage =
                 chatMessageRepository.save(chatMessage);
+
+// Send notification to the receiver
+        User receiverUser = receiver.get();
+        User senderUser = sender.get();
+
+        String receiverFcmToken = receiverUser.getFcmToken();
+
+        String senderName = senderUser.getName();
+
+        String notificationBody =
+                senderName + " sent you a message: "
+                        + savedMessage.getMessage();
+
+        firebaseMessagingService.sendPushNotification(
+                receiverFcmToken,
+                "New Message",
+                notificationBody
+        );
 
         return ResponseEntity.ok(
                 createMessageResponse(savedMessage)

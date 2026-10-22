@@ -25,6 +25,11 @@ public class Notification {
 
     private LocalDateTime createdAt;
 
+    @Column(length = 50)
+    private String type;
+
+    private Long referenceId;
+
     public Notification() {
     }
 
@@ -66,6 +71,22 @@ public class Notification {
 
     public void setRead(boolean read) {
         isRead = read;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public Long getReferenceId() {
+        return referenceId;
+    }
+
+    public void setReferenceId(Long referenceId) {
+        this.referenceId = referenceId;
     }
 
     public LocalDateTime getCreatedAt() {

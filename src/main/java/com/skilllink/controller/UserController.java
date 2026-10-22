@@ -1,3 +1,4 @@
+
 package com.skilllink.controller;
 
 import com.skilllink.entity.User;
@@ -8,9 +9,9 @@ import com.skilllink.service.JwtService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Map;
 import java.util.List;
@@ -86,7 +87,7 @@ public class UserController {
                     .toList();
 
             return ResponseEntity.ok(
-                    java.util.Map.of(
+                    Map.of(
                             "token", token,
                             "roles", roles
                     )
@@ -138,7 +139,7 @@ public class UserController {
         userRepository.save(user);
 
         return ResponseEntity.ok(
-                java.util.Map.of(
+                Map.of(
                         "message", "Role added successfully",
                         "email", user.getEmail(),
                         "role", role.name()
@@ -152,6 +153,8 @@ public class UserController {
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
+
+    // ================= GET ALL PROVIDERS =================
 
     @GetMapping("/providers")
     public ResponseEntity<?> getAllProviders() {
@@ -169,7 +172,7 @@ public class UserController {
         return ResponseEntity.ok(providers);
     }
 
-    // ================= GET USER BY EMAIL =================
+    // ================= GET USER PROFILE =================
 
     @GetMapping("/profile")
     public ResponseEntity<?> getUserProfile(
@@ -188,7 +191,7 @@ public class UserController {
         User user = optionalUser.get();
 
         return ResponseEntity.ok(
-                java.util.Map.of(
+                Map.of(
                         "id", user.getId(),
                         "name", user.getName(),
                         "email", user.getEmail(),
@@ -200,7 +203,7 @@ public class UserController {
         );
     }
 
-// ================= UPDATE USER PROFILE =================
+    // ================= UPDATE USER PROFILE =================
 
     @PutMapping("/profile")
     public ResponseEntity<?> updateUserProfile(
@@ -225,7 +228,7 @@ public class UserController {
         User savedUser = userRepository.save(user);
 
         return ResponseEntity.ok(
-                java.util.Map.of(
+                Map.of(
                         "id", savedUser.getId(),
                         "name", savedUser.getName(),
                         "email", savedUser.getEmail(),
@@ -305,6 +308,61 @@ public class UserController {
                         "message",
                         "Password changed successfully"
                 )
+        );
+    }
+
+    // ================= SAVE FCM TOKEN =================
+
+    @PutMapping("/fcm-token")
+    public ResponseEntity<?> saveFcmToken(
+            Authentication authentication,
+            @RequestBody Map<String, String> request
+    ) {
+
+        if (authentication == null
+                || authentication.getName() == null) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body("User authentication required");
+        }
+
+        String email = authentication.getName();
+
+        Optional<User> optionalUser =
+                userRepository.findByEmail(email);
+
+        if (optionalUser.isEmpty()) {
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body("User not found");
+        }
+
+        String fcmToken = request.get("fcmToken");
+
+        if (fcmToken == null || fcmToken.isBlank()) {
+            return ResponseEntity
+                    .badRequest()
+                    .body("FCM token is required");
+        }
+
+        User user = optionalUser.get();
+
+        System.out.println("========== FCM TOKEN SAVE DEBUG ==========");
+        System.out.println("ACCOUNT EMAIL: " + user.getEmail());
+        System.out.println("TOKEN LENGTH: " + fcmToken.length());
+        System.out.println(
+                "TOKEN FINGERPRINT: "
+                        + Integer.toHexString(fcmToken.hashCode())
+        );
+
+        user.setFcmToken(fcmToken);
+        userRepository.save(user);
+
+        System.out.println("FCM TOKEN SAVE SUCCESS");
+        System.out.println("==========================================");
+
+        return ResponseEntity.ok(
+                Map.of("message", "FCM token saved successfully")
         );
     }
 }
