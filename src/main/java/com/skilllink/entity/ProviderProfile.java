@@ -1,5 +1,7 @@
 package com.skilllink.entity;
 
+import com.skilllink.enums.ProviderApprovalStatus;
+import com.skilllink.enums.ProviderBadge;
 import jakarta.persistence.*;
 
 @Entity
@@ -25,6 +27,17 @@ public class ProviderProfile {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
+    // Provider application approval status
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ProviderApprovalStatus approvalStatus =
+            ProviderApprovalStatus.PENDING;
+
+    // Provider verification badge
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ProviderBadge badge = ProviderBadge.NONE;
+
     public ProviderProfile() {
     }
 
@@ -40,6 +53,8 @@ public class ProviderProfile {
         this.description = description;
         this.profileImage = profileImage;
         this.user = user;
+        this.approvalStatus = ProviderApprovalStatus.PENDING;
+        this.badge = ProviderBadge.NONE;
     }
 
     public Long getId() {
@@ -88,5 +103,21 @@ public class ProviderProfile {
 
     public void setUser(User user) {
         this.user = user;
+    }
+
+    public ProviderApprovalStatus getApprovalStatus() {
+        return approvalStatus;
+    }
+
+    public void setApprovalStatus(ProviderApprovalStatus approvalStatus) {
+        this.approvalStatus = approvalStatus;
+    }
+
+    public ProviderBadge getBadge() {
+        return badge;
+    }
+
+    public void setBadge(ProviderBadge badge) {
+        this.badge = badge;
     }
 }

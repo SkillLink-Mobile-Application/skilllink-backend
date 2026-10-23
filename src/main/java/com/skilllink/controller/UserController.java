@@ -45,16 +45,12 @@ public class UserController {
                 passwordEncoder.encode(user.getPassword())
         );
 
-        Role requestedRole = user.getRole();
-
-        if (requestedRole == null) {
-            requestedRole = Role.CUSTOMER;
-        }
-
+        // Public registration always creates a CUSTOMER account.
+        // Never trust a role sent by the client.
         User savedUser = userRepository.save(user);
 
         UserRole userRole =
-                new UserRole(savedUser, requestedRole);
+                new UserRole(savedUser, Role.CUSTOMER);
 
         savedUser.addRole(userRole);
 

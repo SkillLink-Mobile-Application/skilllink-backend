@@ -8,5 +8,7 @@ import java.util.Optional;
 public interface ProviderProfileRepository
         extends JpaRepository<ProviderProfile, Long> {
 
+    Optional<ProviderProfile> findByUserId(Long userId);
+
     Optional<ProviderProfile> findByUserEmail(String email);
 }

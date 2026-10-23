@@ -1,13 +1,17 @@
+
 package com.skilllink.controller;
 
 import com.skilllink.entity.Notification;
 import com.skilllink.entity.Service;
 import com.skilllink.entity.ServiceRequest;
 import com.skilllink.entity.User;
+import com.skilllink.entity.ProviderProfile;
+import com.skilllink.enums.ProviderApprovalStatus;
 import com.skilllink.repository.NotificationRepository;
 import com.skilllink.repository.ServiceRepository;
 import com.skilllink.repository.ServiceRequestRepository;
 import com.skilllink.repository.UserRepository;
+import com.skilllink.repository.ProviderProfileRepository;
 import com.skilllink.service.FirebaseMessagingService;
 
 import org.springframework.http.HttpStatus;
@@ -29,6 +33,7 @@ public class ServiceRequestController {
     private final UserRepository userRepository;
     private final ServiceRepository serviceRepository;
     private final NotificationRepository notificationRepository;
+    private final ProviderProfileRepository providerProfileRepository;
     private final FirebaseMessagingService firebaseMessagingService;
 
     public ServiceRequestController(
@@ -36,12 +41,14 @@ public class ServiceRequestController {
             UserRepository userRepository,
             ServiceRepository serviceRepository,
             NotificationRepository notificationRepository,
+            ProviderProfileRepository providerProfileRepository,
             FirebaseMessagingService firebaseMessagingService
     ) {
         this.requestRepository = requestRepository;
         this.userRepository = userRepository;
         this.serviceRepository = serviceRepository;
         this.notificationRepository = notificationRepository;
+        this.providerProfileRepository = providerProfileRepository;
         this.firebaseMessagingService = firebaseMessagingService;
     }
 
@@ -61,8 +68,7 @@ public class ServiceRequestController {
                 userRepository.findByEmail(customerEmail);
 
         if (optionalCustomer.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Customer not found");
         }
 
@@ -70,8 +76,7 @@ public class ServiceRequestController {
                 userRepository.findByEmail(providerEmail);
 
         if (optionalProvider.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Provider not found");
         }
 
@@ -79,8 +84,7 @@ public class ServiceRequestController {
                 serviceRepository.findById(serviceId);
 
         if (optionalService.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Service not found");
         }
 
@@ -99,8 +103,7 @@ public class ServiceRequestController {
         request.setDescription(description);
         request.setStatus("PENDING");
 
-        ServiceRequest savedRequest =
-                requestRepository.save(request);
+        ServiceRequest savedRequest = requestRepository.save(request);
 
         // DATABASE NOTIFICATION FOR PROVIDER
 
@@ -116,7 +119,6 @@ public class ServiceRequestController {
 
         notification.setType("NEW_SERVICE_REQUEST");
         notification.setReferenceId(savedRequest.getId());
-
         notification.setRead(false);
         notification.setCreatedAt(LocalDateTime.now());
 
@@ -184,12 +186,10 @@ public class ServiceRequestController {
     public ResponseEntity<?> getCustomerRequests(
             @RequestParam String email
     ) {
-        Optional<User> customer =
-                userRepository.findByEmail(email);
+        Optional<User> customer = userRepository.findByEmail(email);
 
         if (customer.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Customer not found");
         }
 
@@ -204,12 +204,10 @@ public class ServiceRequestController {
     public ResponseEntity<?> getProviderRequests(
             @RequestParam String email
     ) {
-        Optional<User> provider =
-                userRepository.findByEmail(email);
+        Optional<User> provider = userRepository.findByEmail(email);
 
         if (provider.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Provider not found");
         }
 
@@ -230,8 +228,7 @@ public class ServiceRequestController {
                 requestRepository.findById(id);
 
         if (optionalRequest.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Service request not found");
         }
 
@@ -239,20 +236,18 @@ public class ServiceRequestController {
                 userRepository.findByEmail(email);
 
         if (optionalProvider.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Provider not found");
         }
 
         ServiceRequest request = optionalRequest.get();
         User provider = optionalProvider.get();
 
-        // SECURITY CHECK
+        // SECURITY CHECK: PROVIDER CAN UPDATE ONLY THEIR OWN REQUESTS
 
         if (request.getProvider() == null
                 || !request.getProvider().getId().equals(provider.getId())) {
-            return ResponseEntity
-                    .status(HttpStatus.FORBIDDEN)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("You can only update your own requests");
         }
 
@@ -261,9 +256,49 @@ public class ServiceRequestController {
         if (!"ACCEPTED".equals(status)
                 && !"REJECTED".equals(status)
                 && !"COMPLETED".equals(status)) {
-            return ResponseEntity
-                    .badRequest()
+            return ResponseEntity.badRequest()
                     .body("Invalid status");
+        }
+
+        // PROVIDER APPROVAL CHECK BEFORE ACCEPTING A REQUEST
+
+        if ("ACCEPTED".equals(status)) {
+
+            Optional<ProviderProfile> optionalProfile =
+                    providerProfileRepository.findByUserId(provider.getId());
+
+            if (optionalProfile.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Provider profile not found. You cannot accept requests.");
+            }
+
+            ProviderProfile profile = optionalProfile.get();
+
+            if (profile.getApprovalStatus() != ProviderApprovalStatus.APPROVED) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Your provider account is not approved yet. You cannot accept service requests.");
+            }
+
+            // ONLY PENDING REQUESTS CAN BE ACCEPTED
+
+            if (!"PENDING".equals(request.getStatus())) {
+                return ResponseEntity.badRequest()
+                        .body("Only pending requests can be accepted.");
+            }
+        }
+
+        // PREVENT INVALID STATUS TRANSITIONS
+
+        if ("COMPLETED".equals(status)
+                && !"ACCEPTED".equals(request.getStatus())) {
+            return ResponseEntity.badRequest()
+                    .body("Only accepted requests can be completed.");
+        }
+
+        if ("REJECTED".equals(status)
+                && !"PENDING".equals(request.getStatus())) {
+            return ResponseEntity.badRequest()
+                    .body("Only pending requests can be rejected.");
         }
 
         // UPDATE STATUS
@@ -282,8 +317,7 @@ public class ServiceRequestController {
                     "Customer is missing for request ID: " + id
             );
 
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Customer not found for this request");
         }
 
@@ -344,9 +378,7 @@ public class ServiceRequestController {
         if (customerFcmToken != null && !customerFcmToken.isBlank()) {
             System.out.println(
                     "TOKEN FINGERPRINT: "
-                            + Integer.toHexString(
-                            customerFcmToken.hashCode()
-                    )
+                            + Integer.toHexString(customerFcmToken.hashCode())
             );
         }
 
@@ -392,12 +424,10 @@ public class ServiceRequestController {
     public ResponseEntity<?> getProviderBookings(
             @RequestParam String email
     ) {
-        Optional<User> provider =
-                userRepository.findByEmail(email);
+        Optional<User> provider = userRepository.findByEmail(email);
 
         if (provider.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Provider not found");
         }
 
