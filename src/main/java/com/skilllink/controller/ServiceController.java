@@ -8,7 +8,7 @@ import com.skilllink.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import com.skilllink.enums.ProviderApprovalStatus;
 import java.util.List;
 import java.util.Optional;
 
@@ -211,10 +211,13 @@ public class ServiceController {
     //----------GetProvider-------//
     @GetMapping("/category/{category}")
     public ResponseEntity<?> getServicesByCategory(
-            @PathVariable String category
-    ) {
+            @PathVariable String category) {
+
         List<Service> services =
-                serviceRepository.findByCategory(category);
+                serviceRepository.findApprovedServicesByCategory(
+                        category,
+                        ProviderApprovalStatus.APPROVED
+                );
 
         return ResponseEntity.ok(services);
     }
