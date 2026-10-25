@@ -5,6 +5,7 @@ import com.skilllink.entity.User;
 import com.skilllink.enums.Role;
 import com.skilllink.repository.ProviderProfileRepository;
 import com.skilllink.repository.UserRepository;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +15,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -40,87 +42,84 @@ public class ProviderProfileController {
             @RequestParam String email,
             @RequestBody ProviderProfile profile
     ) {
-
-        Optional<User> optionalUser =
-                userRepository.findByEmail(email);
+        Optional<User> optionalUser = userRepository.findByEmail(email);
 
         if (optionalUser.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("User not found");
         }
 
         User user = optionalUser.get();
 
-        // Check whether user is a provider
         boolean isProvider = user.getRoles()
                 .stream()
-                .anyMatch(
-                        userRole ->
-                                userRole.getRole() == Role.PROVIDER
-                );
+                .anyMatch(userRole -> userRole.getRole() == Role.PROVIDER);
 
         if (!isProvider) {
-            return ResponseEntity
-                    .status(HttpStatus.FORBIDDEN)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("User is not a service provider");
         }
 
-        // Check existing profile
-        Optional<ProviderProfile> existingProfile =
-                profileRepository.findByUserEmail(email);
-
-        ProviderProfile providerProfile;
-
-        if (existingProfile.isPresent()) {
-            providerProfile = existingProfile.get();
-        } else {
-            providerProfile = new ProviderProfile();
-            providerProfile.setUser(user);
+        // Required verification details
+        if (profile.getNicNumber() == null
+                || profile.getNicNumber().trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body("NIC number is required");
         }
 
-        providerProfile.setLocation(
-                profile.getLocation()
-        );
+        if (profile.getServiceCategory() == null
+                || profile.getServiceCategory().trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body("Service category is required");
+        }
 
-        providerProfile.setExperience(
-                profile.getExperience()
-        );
+        if (!profile.isTermsAccepted()) {
+            return ResponseEntity.badRequest()
+                    .body("Please accept the terms and conditions");
+        }
 
-        providerProfile.setDescription(
-                profile.getDescription()
-        );
+        ProviderProfile providerProfile =
+                profileRepository.findByUserEmail(email).orElse(null);
 
-        // ================= UPDATE USER DATA =================
+        boolean isNewProfile = providerProfile == null;
+
+        if (isNewProfile) {
+            providerProfile = new ProviderProfile();
+            providerProfile.setUser(user);
+            providerProfile.setApprovalStatus(
+                    com.skilllink.enums.ProviderApprovalStatus.PENDING
+            );
+            providerProfile.setBadge(
+                    com.skilllink.enums.ProviderBadge.NONE
+            );
+        }
+
+        providerProfile.setLocation(profile.getLocation());
+        providerProfile.setExperience(profile.getExperience());
+        providerProfile.setDescription(profile.getDescription());
+        providerProfile.setNicNumber(profile.getNicNumber().trim());
+        providerProfile.setServiceCategory(profile.getServiceCategory().trim());
+        providerProfile.setCertificateName(profile.getCertificateName());
+        providerProfile.setIssuingInstitute(profile.getIssuingInstitute());
+        providerProfile.setTermsAccepted(true);
 
         if (profile.getUser() != null) {
-
-            if (profile.getUser().getName() != null &&
-                    !profile.getUser().getName().trim().isEmpty()) {
-
-                user.setName(
-                        profile.getUser().getName().trim()
-                );
+            if (profile.getUser().getName() != null
+                    && !profile.getUser().getName().trim().isEmpty()) {
+                user.setName(profile.getUser().getName().trim());
             }
 
-            if (profile.getUser().getPhone() != null &&
-                    !profile.getUser().getPhone().trim().isEmpty()) {
-
-                user.setPhone(
-                        profile.getUser().getPhone().trim()
-                );
+            if (profile.getUser().getPhone() != null
+                    && !profile.getUser().getPhone().trim().isEmpty()) {
+                user.setPhone(profile.getUser().getPhone().trim());
             }
 
             userRepository.save(user);
         }
 
-        // Save profile image path if provided
-        if (profile.getProfileImage() != null &&
-                !profile.getProfileImage().isEmpty()) {
-
-            providerProfile.setProfileImage(
-                    profile.getProfileImage()
-            );
+        if (profile.getProfileImage() != null
+                && !profile.getProfileImage().isEmpty()) {
+            providerProfile.setProfileImage(profile.getProfileImage());
         }
 
         ProviderProfile savedProfile =
@@ -132,150 +131,86 @@ public class ProviderProfileController {
     // ================= GET PROFILE =================
 
     @GetMapping("/{email}")
-    public ResponseEntity<?> getProfile(
-            @PathVariable String email
-    ) {
-
+    public ResponseEntity<?> getProfile(@PathVariable String email) {
         Optional<ProviderProfile> profile =
                 profileRepository.findByUserEmail(email);
 
         if (profile.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Provider profile not found");
         }
 
         return ResponseEntity.ok(profile.get());
     }
 
-    // ================= UPLOAD PROFILE IMAGE =================
+    // ================= UPLOAD PROVIDER PROFILE IMAGE =================
 
     @PostMapping("/upload-image")
     public ResponseEntity<?> uploadProfileImage(
             @RequestParam String email,
             @RequestParam("image") MultipartFile image
     ) {
-
         try {
-
-            // Check user
-            Optional<User> optionalUser =
-                    userRepository.findByEmail(email);
+            Optional<User> optionalUser = userRepository.findByEmail(email);
 
             if (optionalUser.isEmpty()) {
-                return ResponseEntity
-                        .status(HttpStatus.NOT_FOUND)
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body("User not found");
             }
 
             User user = optionalUser.get();
 
-            // Check provider role
             boolean isProvider = user.getRoles()
                     .stream()
-                    .anyMatch(
-                            userRole ->
-                                    userRole.getRole() == Role.PROVIDER
-                    );
+                    .anyMatch(userRole -> userRole.getRole() == Role.PROVIDER);
 
             if (!isProvider) {
-                return ResponseEntity
-                        .status(HttpStatus.FORBIDDEN)
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body("User is not a service provider");
             }
 
-            // Check image
             if (image == null || image.isEmpty()) {
-                return ResponseEntity
-                        .badRequest()
+                return ResponseEntity.badRequest()
                         .body("Please select an image");
             }
 
-            // Create upload folder
-            Path uploadPath = Paths.get(
-                    "uploads/profile-images"
-            );
+            String originalName = image.getOriginalFilename();
 
+            if (originalName == null
+                    || !originalName.toLowerCase().matches(".*\\.(jpg|jpeg|png)$")) {
+                return ResponseEntity.badRequest()
+                        .body("Only JPG, JPEG and PNG images are allowed");
+            }
+
+            Path uploadPath = Paths.get("uploads", "profile-images");
             Files.createDirectories(uploadPath);
 
-            // Get file extension
-            String originalName =
-                    image.getOriginalFilename();
+            String extension = originalName.substring(originalName.lastIndexOf("."));
+            String fileName = "profile_" + UUID.randomUUID() + extension;
 
-            String extension = "";
+            Path filePath = uploadPath.resolve(fileName);
+            Files.write(filePath, image.getBytes());
 
-            if (originalName != null &&
-                    originalName.contains(".")) {
+            ProviderProfile providerProfile =
+                    profileRepository.findByUserEmail(email).orElseGet(() -> {
+                        ProviderProfile newProfile = new ProviderProfile();
+                        newProfile.setUser(user);
+                        return newProfile;
+                    });
 
-                extension =
-                        originalName.substring(
-                                originalName.lastIndexOf(".")
-                        );
-            }
+            String imagePath = "/uploads/profile-images/" + fileName;
+            providerProfile.setProfileImage(imagePath);
 
-            // Create unique file name
-            String fileName =
-                    "profile_" +
-                            UUID.randomUUID() +
-                            extension;
+            profileRepository.save(providerProfile);
 
-            Path filePath =
-                    uploadPath.resolve(fileName);
-
-            // Save image
-            Files.write(
-                    filePath,
-                    image.getBytes()
-            );
-
-            // Find provider profile
-            Optional<ProviderProfile> existingProfile =
-                    profileRepository.findByUserEmail(email);
-
-            ProviderProfile providerProfile;
-
-            if (existingProfile.isPresent()) {
-
-                providerProfile =
-                        existingProfile.get();
-
-            } else {
-
-                providerProfile =
-                        new ProviderProfile();
-
-                providerProfile.setUser(user);
-            }
-
-            // Save image path in database
-            String imagePath =
-                    "/uploads/profile-images/" +
-                            fileName;
-
-            providerProfile.setProfileImage(
-                    imagePath
-            );
-
-            profileRepository.save(
-                    providerProfile
-            );
-
-            return ResponseEntity.ok(
-                    imagePath
-            );
+            return ResponseEntity.ok(imagePath);
 
         } catch (IOException e) {
-
-            return ResponseEntity
-                    .status(
-                            HttpStatus.INTERNAL_SERVER_ERROR
-                    )
-                    .body(
-                            "Failed to upload image: " +
-                                    e.getMessage()
-                    );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to upload image: " + e.getMessage());
         }
     }
+
     // ================= CUSTOMER PROFILE IMAGE UPLOAD =================
 
     @PostMapping("/customer-upload-image")
@@ -283,88 +218,141 @@ public class ProviderProfileController {
             @RequestParam String email,
             @RequestParam("image") MultipartFile image
     ) {
-
         try {
-
-            // Check user
-            Optional<User> optionalUser =
-                    userRepository.findByEmail(email);
+            Optional<User> optionalUser = userRepository.findByEmail(email);
 
             if (optionalUser.isEmpty()) {
-                return ResponseEntity
-                        .status(HttpStatus.NOT_FOUND)
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body("User not found");
             }
 
             User user = optionalUser.get();
 
-            // Check image
             if (image == null || image.isEmpty()) {
-                return ResponseEntity
-                        .badRequest()
+                return ResponseEntity.badRequest()
                         .body("Please select an image");
             }
 
-            // Create upload folder
-            Path uploadPath = Paths.get(
-                    "uploads/profile-images"
-            );
+            String originalName = image.getOriginalFilename();
 
-            Files.createDirectories(uploadPath);
-
-            // Get file extension
-            String originalName =
-                    image.getOriginalFilename();
-
-            String extension = "";
-
-            if (originalName != null &&
-                    originalName.contains(".")) {
-
-                extension =
-                        originalName.substring(
-                                originalName.lastIndexOf(".")
-                        );
+            if (originalName == null
+                    || !originalName.toLowerCase().matches(".*\\.(jpg|jpeg|png)$")) {
+                return ResponseEntity.badRequest()
+                        .body("Only JPG, JPEG and PNG images are allowed");
             }
 
-            // Create unique file name
-            String fileName =
-                    "customer_profile_" +
-                            UUID.randomUUID() +
-                            extension;
+            Path uploadPath = Paths.get("uploads", "profile-images");
+            Files.createDirectories(uploadPath);
 
-            Path filePath =
-                    uploadPath.resolve(fileName);
+            String extension = originalName.substring(originalName.lastIndexOf("."));
+            String fileName = "customer_profile_" + UUID.randomUUID() + extension;
 
-            // Save image
-            Files.write(
-                    filePath,
-                    image.getBytes()
-            );
+            Path filePath = uploadPath.resolve(fileName);
+            Files.write(filePath, image.getBytes());
 
-            // Save image path
-            String imagePath =
-                    "/uploads/profile-images/" +
-                            fileName;
+            String imagePath = "/uploads/profile-images/" + fileName;
 
             user.setProfileImage(imagePath);
-
             userRepository.save(user);
 
+            return ResponseEntity.ok(imagePath);
+
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to upload image: " + e.getMessage());
+        }
+    }
+
+    // ================= UPLOAD PROVIDER CERTIFICATE =================
+
+    @PostMapping("/upload-certificate")
+    public ResponseEntity<?> uploadCertificate(
+            @RequestParam("email") String email,
+            @RequestParam("certificate") MultipartFile certificate
+    ) {
+        try {
+            Optional<User> optionalUser = userRepository.findByEmail(email);
+
+            if (optionalUser.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("User not found");
+            }
+
+            User user = optionalUser.get();
+
+            boolean isProvider = user.getRoles()
+                    .stream()
+                    .anyMatch(userRole -> userRole.getRole() == Role.PROVIDER);
+
+            if (!isProvider) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("User is not a service provider");
+            }
+
+            if (certificate == null || certificate.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body("Please select a certificate file");
+            }
+
+            if (certificate.getSize() > 10L * 1024 * 1024) {
+                return ResponseEntity.badRequest()
+                        .body("Certificate file must be 10 MB or smaller");
+            }
+
+            String originalName = certificate.getOriginalFilename();
+
+            if (originalName == null || !originalName.contains(".")) {
+                return ResponseEntity.badRequest()
+                        .body("Invalid certificate file");
+            }
+
+            String extension = originalName
+                    .substring(originalName.lastIndexOf("."))
+                    .toLowerCase();
+
+            if (!extension.matches("\\.(pdf|jpg|jpeg|png)")) {
+                return ResponseEntity.badRequest()
+                        .body("Only PDF, JPG, JPEG and PNG files are allowed");
+            }
+
+            ProviderProfile profile = profileRepository
+                    .findByUserEmail(email)
+                    .orElse(null);
+
+            if (profile == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("Provider profile not found. Save your profile first.");
+            }
+
+            Path uploadDirectory = Paths.get("uploads", "certificates")
+                    .toAbsolutePath()
+                    .normalize();
+
+            Files.createDirectories(uploadDirectory);
+
+            String fileName = UUID.randomUUID() + extension;
+            Path targetPath = uploadDirectory.resolve(fileName).normalize();
+
+            if (!targetPath.startsWith(uploadDirectory)) {
+                return ResponseEntity.badRequest()
+                        .body("Invalid file path");
+            }
+
+            certificate.transferTo(targetPath);
+
+            profile.setCertificateFile("/uploads/certificates/" + fileName);
+            profileRepository.save(profile);
+
             return ResponseEntity.ok(
-                    imagePath
+                    Map.of(
+                            "message", "Certificate uploaded successfully",
+                            "certificateFile", profile.getCertificateFile()
+                    )
             );
 
         } catch (IOException e) {
-
-            return ResponseEntity
-                    .status(
-                            HttpStatus.INTERNAL_SERVER_ERROR
-                    )
-                    .body(
-                            "Failed to upload image: " +
-                                    e.getMessage()
-                    );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to upload certificate");
         }
     }
 }

@@ -38,6 +38,24 @@ public class ProviderProfile {
     @Column(nullable = false)
     private ProviderBadge badge = ProviderBadge.NONE;
 
+    @Column(name = "nic_number")
+    private String nicNumber;
+
+    @Column(name = "service_category")
+    private String serviceCategory;
+
+    @Column(name = "certificate_name")
+    private String certificateName;
+
+    @Column(name = "issuing_institute")
+    private String issuingInstitute;
+
+    @Column(name = "certificate_file")
+    private String certificateFile;
+
+    @Column(name = "terms_accepted", nullable = false)
+    private boolean termsAccepted = false;
+
     public ProviderProfile() {
     }
 
@@ -119,5 +137,53 @@ public class ProviderProfile {
 
     public void setBadge(ProviderBadge badge) {
         this.badge = badge;
+    }
+
+    public String getNicNumber() {
+        return nicNumber;
+    }
+
+    public void setNicNumber(String nicNumber) {
+        this.nicNumber = nicNumber;
+    }
+
+    public String getServiceCategory() {
+        return serviceCategory;
+    }
+
+    public void setServiceCategory(String serviceCategory) {
+        this.serviceCategory = serviceCategory;
+    }
+
+    public String getCertificateName() {
+        return certificateName;
+    }
+
+    public void setCertificateName(String certificateName) {
+        this.certificateName = certificateName;
+    }
+
+    public String getIssuingInstitute() {
+        return issuingInstitute;
+    }
+
+    public void setIssuingInstitute(String issuingInstitute) {
+        this.issuingInstitute = issuingInstitute;
+    }
+
+    public String getCertificateFile() {
+        return certificateFile;
+    }
+
+    public void setCertificateFile(String certificateFile) {
+        this.certificateFile = certificateFile;
+    }
+
+    public boolean isTermsAccepted() {
+        return termsAccepted;
+    }
+
+    public void setTermsAccepted(boolean termsAccepted) {
+        this.termsAccepted = termsAccepted;
     }
 }

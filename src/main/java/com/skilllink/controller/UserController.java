@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.List;
@@ -41,16 +42,27 @@ public class UserController {
     @PostMapping("/register")
     public User register(@RequestBody User user) {
 
+        Role requestedRole = user.getRole();
+
+        if (requestedRole == null ||
+                (requestedRole != Role.CUSTOMER &&
+                        requestedRole != Role.PROVIDER)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid registration role"
+            );
+        }
+
         user.setPassword(
                 passwordEncoder.encode(user.getPassword())
         );
 
-        // Public registration always creates a CUSTOMER account.
-        // Never trust a role sent by the client.
         User savedUser = userRepository.save(user);
 
-        UserRole userRole =
-                new UserRole(savedUser, Role.CUSTOMER);
+        UserRole userRole = new UserRole(
+                savedUser,
+                requestedRole
+        );
 
         savedUser.addRole(userRole);
 

@@ -54,6 +54,7 @@ public class ServiceRequestController {
 
     // ==================== CREATE SERVICE REQUEST ====================
 
+
     @PostMapping("/create")
     public ResponseEntity<?> createRequest(
             @RequestParam String customerEmail,
@@ -80,6 +81,25 @@ public class ServiceRequestController {
                     .body("Provider not found");
         }
 
+        User customer = optionalCustomer.get();
+        User provider = optionalProvider.get();
+
+        // Check provider approval before accepting new customer requests
+        Optional<ProviderProfile> optionalProfile =
+                providerProfileRepository.findByUserId(provider.getId());
+
+        if (optionalProfile.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("This provider is not approved to receive requests.");
+        }
+
+        ProviderProfile profile = optionalProfile.get();
+
+        if (profile.getApprovalStatus() != ProviderApprovalStatus.APPROVED) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("This provider is not approved to receive customer requests.");
+        }
+
         Optional<Service> optionalService =
                 serviceRepository.findById(serviceId);
 
@@ -88,12 +108,9 @@ public class ServiceRequestController {
                     .body("Service not found");
         }
 
-        User customer = optionalCustomer.get();
-        User provider = optionalProvider.get();
         Service service = optionalService.get();
 
         ServiceRequest request = new ServiceRequest();
-
         request.setCustomer(customer);
         request.setProvider(provider);
         request.setService(service);
@@ -105,10 +122,8 @@ public class ServiceRequestController {
 
         ServiceRequest savedRequest = requestRepository.save(request);
 
-        // DATABASE NOTIFICATION FOR PROVIDER
-
+        // Database notification for provider
         Notification notification = new Notification();
-
         notification.setUser(provider);
         notification.setTitle("New Service Request");
         notification.setMessage(
@@ -116,7 +131,6 @@ public class ServiceRequestController {
                         + " sent you a service request for "
                         + service.getName()
         );
-
         notification.setType("NEW_SERVICE_REQUEST");
         notification.setReferenceId(savedRequest.getId());
         notification.setRead(false);
@@ -124,34 +138,8 @@ public class ServiceRequestController {
 
         notificationRepository.save(notification);
 
-        // PUSH NOTIFICATION TO PROVIDER
-
+        // Push notification to provider
         String providerFcmToken = provider.getFcmToken();
-
-        System.out.println("PROVIDER EMAIL: " + provider.getEmail());
-
-        System.out.println(
-                "PROVIDER TOKEN FINGERPRINT: "
-                        + (providerFcmToken == null
-                        ? "NULL"
-                        : Integer.toHexString(providerFcmToken.hashCode()))
-        );
-
-        System.out.println("\n========== PROVIDER FCM DEBUG ==========");
-        System.out.println("TARGET EMAIL: " + provider.getEmail());
-        System.out.println(
-                "TOKEN EXISTS: "
-                        + (providerFcmToken != null
-                        && !providerFcmToken.isBlank())
-        );
-        System.out.println(
-                "TOKEN LENGTH: "
-                        + (providerFcmToken == null
-                        ? 0 : providerFcmToken.length())
-        );
-        System.out.println("REQUEST ID: " + savedRequest.getId());
-        System.out.println("REQUEST STATUS: PENDING");
-        System.out.println("========================================");
 
         if (providerFcmToken != null && !providerFcmToken.isBlank()) {
             try {
@@ -160,25 +148,17 @@ public class ServiceRequestController {
                         notification.getTitle(),
                         notification.getMessage()
                 );
-
-                System.out.println(
-                        "Provider push notification call completed."
-                );
             } catch (Exception e) {
                 System.err.println(
                         "Provider push notification failed: "
                                 + e.getMessage()
                 );
-                e.printStackTrace();
             }
-        } else {
-            System.out.println(
-                    "Provider FCM token is missing. Push skipped."
-            );
         }
 
         return ResponseEntity.ok(savedRequest);
     }
+
 
     // ==================== GET CUSTOMER REQUESTS ====================
 
