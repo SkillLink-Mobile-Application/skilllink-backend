@@ -13,7 +13,8 @@ import com.skilllink.repository.ServiceRequestRepository;
 import com.skilllink.repository.UserRepository;
 import com.skilllink.repository.ProviderProfileRepository;
 import com.skilllink.service.FirebaseMessagingService;
-
+import com.skilllink.repository.ProviderAvailabilityRepository;
+import java.time.DayOfWeek;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -35,6 +36,7 @@ public class ServiceRequestController {
     private final NotificationRepository notificationRepository;
     private final ProviderProfileRepository providerProfileRepository;
     private final FirebaseMessagingService firebaseMessagingService;
+    private final ProviderAvailabilityRepository availabilityRepository;
 
     public ServiceRequestController(
             ServiceRequestRepository requestRepository,
@@ -42,7 +44,8 @@ public class ServiceRequestController {
             ServiceRepository serviceRepository,
             NotificationRepository notificationRepository,
             ProviderProfileRepository providerProfileRepository,
-            FirebaseMessagingService firebaseMessagingService
+            FirebaseMessagingService firebaseMessagingService,
+            ProviderAvailabilityRepository availabilityRepository
     ) {
         this.requestRepository = requestRepository;
         this.userRepository = userRepository;
@@ -50,10 +53,13 @@ public class ServiceRequestController {
         this.notificationRepository = notificationRepository;
         this.providerProfileRepository = providerProfileRepository;
         this.firebaseMessagingService = firebaseMessagingService;
+        this.availabilityRepository = availabilityRepository;
     }
 
     // ==================== CREATE SERVICE REQUEST ====================
 
+
+    // ==================== CREATE SERVICE REQUEST ====================
 
     @PostMapping("/create")
     public ResponseEntity<?> createRequest(
@@ -84,22 +90,18 @@ public class ServiceRequestController {
         User customer = optionalCustomer.get();
         User provider = optionalProvider.get();
 
-        // Check provider approval before accepting new customer requests
+        // Check provider approval
         Optional<ProviderProfile> optionalProfile =
                 providerProfileRepository.findByUserId(provider.getId());
 
-        if (optionalProfile.isEmpty()) {
+        if (optionalProfile.isEmpty()
+                || optionalProfile.get().getApprovalStatus()
+                != ProviderApprovalStatus.APPROVED) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("This provider is not approved to receive requests.");
         }
 
-        ProviderProfile profile = optionalProfile.get();
-
-        if (profile.getApprovalStatus() != ProviderApprovalStatus.APPROVED) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body("This provider is not approved to receive customer requests.");
-        }
-
+        // Check service
         Optional<Service> optionalService =
                 serviceRepository.findById(serviceId);
 
@@ -108,21 +110,75 @@ public class ServiceRequestController {
                     .body("Service not found");
         }
 
+        // Parse requested date and time
+        LocalDate date;
+        LocalTime time;
+
+        try {
+            date = LocalDate.parse(requestedDate);
+            time = LocalTime.parse(requestedTime);
+        } catch (java.time.format.DateTimeParseException e) {
+            return ResponseEntity.badRequest()
+                    .body("Invalid date or time format. Use yyyy-MM-dd and HH:mm.");
+        }
+
+        // Reject past bookings
+        if (date.isBefore(LocalDate.now())
+                || (date.equals(LocalDate.now())
+                && !time.isAfter(LocalTime.now()))) {
+            return ResponseEntity.badRequest()
+                    .body("Please select a future date and time.");
+        }
+
+        // Check provider availability for selected day
+        DayOfWeek day = date.getDayOfWeek();
+
+        List<com.skilllink.entity.ProviderAvailability> slots =
+                availabilityRepository
+                        .findByProviderIdAndDayOfWeekAndAvailableTrue(
+                                provider.getId(), day);
+
+        boolean withinWorkingHours = slots.stream().anyMatch(slot ->
+                !time.isBefore(slot.getStartTime())
+                        && time.isBefore(slot.getEndTime())
+        );
+
+        if (!withinWorkingHours) {
+            return ResponseEntity.badRequest()
+                    .body("Provider is not available at the selected date and time.");
+        }
+
+        // Prevent duplicate bookings at the same date and time
+        boolean alreadyBooked =
+                requestRepository
+                        .existsByProviderIdAndRequestedDateAndRequestedTimeAndStatusIn(
+                                provider.getId(),
+                                date,
+                                time,
+                                List.of("PENDING", "ACCEPTED")
+                        );
+
+        if (alreadyBooked) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("This time slot is already booked. Please select another time.");
+        }
+
+        // Create service request
         Service service = optionalService.get();
 
         ServiceRequest request = new ServiceRequest();
         request.setCustomer(customer);
         request.setProvider(provider);
         request.setService(service);
-        request.setRequestedDate(LocalDate.parse(requestedDate));
-        request.setRequestedTime(LocalTime.parse(requestedTime));
+        request.setRequestedDate(date);
+        request.setRequestedTime(time);
         request.setAddress(address);
         request.setDescription(description);
         request.setStatus("PENDING");
 
         ServiceRequest savedRequest = requestRepository.save(request);
 
-        // Database notification for provider
+        // Database notification
         Notification notification = new Notification();
         notification.setUser(provider);
         notification.setTitle("New Service Request");
@@ -138,7 +194,7 @@ public class ServiceRequestController {
 
         notificationRepository.save(notification);
 
-        // Push notification to provider
+        // Push notification
         String providerFcmToken = provider.getFcmToken();
 
         if (providerFcmToken != null && !providerFcmToken.isBlank()) {
@@ -158,7 +214,6 @@ public class ServiceRequestController {
 
         return ResponseEntity.ok(savedRequest);
     }
-
 
     // ==================== GET CUSTOMER REQUESTS ====================
 
