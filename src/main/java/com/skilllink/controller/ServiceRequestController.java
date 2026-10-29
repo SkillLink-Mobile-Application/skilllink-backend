@@ -131,12 +131,31 @@ public class ServiceRequestController {
         }
 
         // Check provider availability for selected day
+
+        // Check provider availability for the selected date.
+        // Specific-date entries override the weekly recurring schedule.
+
         DayOfWeek day = date.getDayOfWeek();
 
-        List<com.skilllink.entity.ProviderAvailability> slots =
-                availabilityRepository
-                        .findByProviderIdAndDayOfWeekAndAvailableTrue(
-                                provider.getId(), day);
+        List<com.skilllink.entity.ProviderAvailability> dateSlots =
+                availabilityRepository.findByProviderIdAndSpecificDate(
+                        provider.getId(), date
+                );
+
+        List<com.skilllink.entity.ProviderAvailability> slots;
+
+        if (!dateSlots.isEmpty()) {
+            // A specific-date schedule exists, so use only that schedule.
+            slots = dateSlots.stream()
+                    .filter(com.skilllink.entity.ProviderAvailability::isAvailable)
+                    .toList();
+        } else {
+            // No specific-date schedule: fall back to weekly availability.
+            slots = availabilityRepository
+                    .findByProviderIdAndDayOfWeekAndAvailableTrue(
+                            provider.getId(), day
+                    );
+        }
 
         boolean withinWorkingHours = slots.stream().anyMatch(slot ->
                 !time.isBefore(slot.getStartTime())

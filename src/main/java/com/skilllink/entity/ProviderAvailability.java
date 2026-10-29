@@ -3,6 +3,7 @@ package com.skilllink.entity;
 
 import jakarta.persistence.*;
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalTime;
 
 @Entity
@@ -12,6 +13,10 @@ import java.time.LocalTime;
                 @Index(
                         name = "idx_availability_provider_day",
                         columnList = "provider_id, day_of_week"
+                ),
+                @Index(
+                        name = "idx_availability_provider_date",
+                        columnList = "provider_id, specific_date"
                 )
         }
 )
@@ -25,9 +30,14 @@ public class ProviderAvailability {
     @JoinColumn(name = "provider_id", nullable = false)
     private User provider;
 
+    // Weekly recurring availability; null for date-specific entries.
     @Enumerated(EnumType.STRING)
-    @Column(name = "day_of_week", nullable = false)
+    @Column(name = "day_of_week", nullable = true)
     private DayOfWeek dayOfWeek;
+
+    // Specific-date availability; null for weekly recurring entries.
+    @Column(name = "specific_date", nullable = true)
+    private LocalDate specificDate;
 
     @Column(name = "start_time", nullable = false)
     private LocalTime startTime;
@@ -63,6 +73,14 @@ public class ProviderAvailability {
 
     public void setDayOfWeek(DayOfWeek dayOfWeek) {
         this.dayOfWeek = dayOfWeek;
+    }
+
+    public LocalDate getSpecificDate() {
+        return specificDate;
+    }
+
+    public void setSpecificDate(LocalDate specificDate) {
+        this.specificDate = specificDate;
     }
 
     public LocalTime getStartTime() {
