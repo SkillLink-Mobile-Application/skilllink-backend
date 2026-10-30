@@ -1,3 +1,4 @@
+
 package com.skilllink.controller;
 
 import com.skilllink.entity.Notification;
@@ -93,29 +94,20 @@ public class ServiceRequestController {
             }
     )
     public ResponseEntity<?> createRequest(
-
             @RequestParam String customerEmail,
             @RequestParam String providerEmail,
             @RequestParam Long serviceId,
-
             @RequestParam(required = false) String serviceType,
             @RequestParam(required = false) String requestedDate,
             @RequestParam(required = false) String requestedTime,
-
             @RequestParam(required = false) String address,
             @RequestParam(required = false) Double latitude,
             @RequestParam(required = false) Double longitude,
-
             @RequestParam String description,
-
             @RequestParam(required = false) List<MultipartFile> photos
-
     ) {
 
-        // Validate photos before processing the request.
-
         if (photos != null) {
-
             List<MultipartFile> actualPhotos = photos.stream()
                     .filter(photo -> photo != null && !photo.isEmpty())
                     .toList();
@@ -126,7 +118,6 @@ public class ServiceRequestController {
             }
 
             for (MultipartFile photo : actualPhotos) {
-
                 if (photo.getSize() > MAX_FILE_SIZE) {
                     return ResponseEntity.badRequest()
                             .body("Each photo must be 5MB or smaller.");
@@ -136,9 +127,7 @@ public class ServiceRequestController {
 
                 if (contentType == null
                         || !ALLOWED_CONTENT_TYPES.contains(
-                        contentType.toLowerCase()
-                )) {
-
+                        contentType.toLowerCase())) {
                     return ResponseEntity.badRequest()
                             .body("Only JPG, PNG and WEBP photos are allowed.");
                 }
@@ -169,13 +158,7 @@ public class ServiceRequestController {
                     .body("You cannot request your own service.");
         }
 
-        Optional<ProviderProfile> optionalProfile =
-                providerProfileRepository.findByUserId(provider.getId());
-
-        if (optionalProfile.isEmpty()
-                || optionalProfile.get().getApprovalStatus()
-                != ProviderApprovalStatus.APPROVED) {
-
+        if (!isProviderApproved(provider)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("This provider is not approved to receive requests.");
         }
@@ -205,7 +188,6 @@ public class ServiceRequestController {
         if (latitude != null
                 && (latitude < -90 || latitude > 90
                 || longitude < -180 || longitude > 180)) {
-
             return ResponseEntity.badRequest()
                     .body("Invalid GPS coordinates.");
         }
@@ -227,7 +209,6 @@ public class ServiceRequestController {
 
             if (requestedDate == null || requestedDate.isBlank()
                     || requestedTime == null || requestedTime.isBlank()) {
-
                 return ResponseEntity.badRequest()
                         .body("Scheduled requests require a preferred date and time.");
             }
@@ -235,67 +216,38 @@ public class ServiceRequestController {
             try {
                 date = LocalDate.parse(requestedDate);
                 time = LocalTime.parse(requestedTime);
-
             } catch (DateTimeParseException e) {
-
                 return ResponseEntity.badRequest()
                         .body("Invalid date or time. Use yyyy-MM-dd and HH:mm.");
             }
 
-            if (date.isBefore(LocalDate.now())
-                    || (date.equals(LocalDate.now())
-                    && !time.isAfter(LocalTime.now()))) {
-
+            if (!isFutureDateTime(date, time)) {
                 return ResponseEntity.badRequest()
                         .body("Please select a future date and time.");
             }
 
-            DayOfWeek day = date.getDayOfWeek();
+            boolean alreadyBooked =
+                    requestRepository
+                            .existsByProviderIdAndRequestedDateAndRequestedTimeAndStatusIn(
+                                    provider.getId(),
+                                    date,
+                                    time,
+                                    List.of("CONFIRMED", "ACCEPTED", "IN_PROGRESS")
+                            );
 
-            List<ProviderAvailability> dateSlots =
-                    availabilityRepository.findByProviderIdAndSpecificDate(
-                            provider.getId(), date
-                    );
-
-            List<ProviderAvailability> slots;
-
-            if (!dateSlots.isEmpty()) {
-
-                slots = dateSlots.stream()
-                        .filter(ProviderAvailability::isAvailable)
-                        .toList();
-
-            } else {
-
-                slots = availabilityRepository
-                        .findByProviderIdAndDayOfWeekAndAvailableTrue(
-                                provider.getId(), day
-                        );
-            }
-
-            final LocalTime selectedTime = time;
-
-            boolean withinWorkingHours = slots.stream().anyMatch(slot ->
-                    !selectedTime.isBefore(slot.getStartTime())
-                            && selectedTime.isBefore(slot.getEndTime())
-            );
-
-            if (!withinWorkingHours) {
-                return ResponseEntity.badRequest()
-                        .body("Provider is not available at the preferred date and time.");
+            if (alreadyBooked) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body("This time is already booked. Please select another time.");
             }
 
         } else {
 
             if ((requestedDate != null && !requestedDate.isBlank())
                     || (requestedTime != null && !requestedTime.isBlank())) {
-
                 return ResponseEntity.badRequest()
                         .body("Do not send a preferred date/time for ON_DEMAND requests.");
             }
         }
-
-        // Create service request.
 
         ServiceRequest request = new ServiceRequest();
 
@@ -311,32 +263,23 @@ public class ServiceRequestController {
         request.setDescription(description.trim());
         request.setStatus("PENDING");
 
-        // Save photos.
-
         List<String> savedPhotoPaths = new ArrayList<>();
 
         try {
-
             if (photos != null) {
-
                 for (MultipartFile photo : photos) {
-
                     if (photo == null || photo.isEmpty()) {
                         continue;
                     }
 
                     String photoPath = savePhoto(photo);
-
                     savedPhotoPaths.add(photoPath);
                 }
             }
 
             request.setPhotos(savedPhotoPaths);
 
-            ServiceRequest savedRequest =
-                    requestRepository.save(request);
-
-            // Notification to provider.
+            ServiceRequest savedRequest = requestRepository.save(request);
 
             createNotification(
                     provider,
@@ -352,16 +295,12 @@ public class ServiceRequestController {
             return ResponseEntity.ok(savedRequest);
 
         } catch (IOException e) {
-
-            // Remove uploaded files if the request fails.
-
             deletePhotos(savedPhotoPaths);
 
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Failed to upload photos. Please try again.");
 
         } catch (Exception e) {
-
             deletePhotos(savedPhotoPaths);
 
             System.err.println(
@@ -382,12 +321,10 @@ public class ServiceRequestController {
         Files.createDirectories(UPLOAD_DIRECTORY);
 
         String originalFilename = photo.getOriginalFilename();
-
         String extension = ".jpg";
 
         if (originalFilename != null
                 && originalFilename.lastIndexOf('.') >= 0) {
-
             extension = originalFilename.substring(
                     originalFilename.lastIndexOf('.')
             ).toLowerCase();
@@ -417,9 +354,7 @@ public class ServiceRequestController {
     private void deletePhotos(List<String> photoPaths) {
 
         for (String photoPath : photoPaths) {
-
             try {
-
                 String filename = photoPath.substring(
                         photoPath.lastIndexOf('/') + 1
                 );
@@ -431,7 +366,6 @@ public class ServiceRequestController {
                 }
 
             } catch (Exception e) {
-
                 System.err.println(
                         "Failed to delete uploaded photo: " + e.getMessage()
                 );
@@ -447,7 +381,6 @@ public class ServiceRequestController {
     public ResponseEntity<?> getCustomerRequests(
             @RequestParam String email
     ) {
-
         Optional<User> customer = userRepository.findByEmail(email);
 
         if (customer.isEmpty()) {
@@ -468,7 +401,6 @@ public class ServiceRequestController {
     public ResponseEntity<?> getProviderRequests(
             @RequestParam String email
     ) {
-
         Optional<User> provider = userRepository.findByEmail(email);
 
         if (provider.isEmpty()) {
@@ -482,7 +414,7 @@ public class ServiceRequestController {
     }
 
     // =========================================================
-    // PROVIDER PROPOSES DATE AND TIME
+    // PROVIDER PROPOSES / RESCHEDULES DATE AND TIME
     // =========================================================
 
     @PutMapping("/propose-time/{id}")
@@ -513,7 +445,6 @@ public class ServiceRequestController {
 
         if (request.getProvider() == null
                 || !request.getProvider().getId().equals(provider.getId())) {
-
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("You can only update your own requests.");
         }
@@ -523,48 +454,72 @@ public class ServiceRequestController {
                     .body("Your provider account is not approved.");
         }
 
-        if (!"PENDING".equals(request.getStatus())
-                && !"NEGOTIATING".equals(request.getStatus())) {
+        String currentStatus = request.getStatus();
 
+        if (!"PENDING".equals(currentStatus)
+                && !"NEGOTIATING".equals(currentStatus)) {
             return ResponseEntity.badRequest()
-                    .body("Only pending or negotiating requests can receive a time proposal.");
+                    .body("This request cannot receive a time proposal.");
         }
 
         LocalDate date;
         LocalTime time;
 
         try {
-
             date = LocalDate.parse(proposedDate);
             time = LocalTime.parse(proposedTime);
-
         } catch (DateTimeParseException e) {
-
             return ResponseEntity.badRequest()
                     .body("Invalid date or time. Use yyyy-MM-dd and HH:mm.");
         }
 
-        if (date.isBefore(LocalDate.now())
-                || (date.equals(LocalDate.now())
-                && !time.isAfter(LocalTime.now()))) {
-
+        if (!isFutureDateTime(date, time)) {
             return ResponseEntity.badRequest()
                     .body("Please propose a future date and time.");
         }
 
+        // Check only whether this exact time is already booked.
+        // Provider can propose a time outside normal availability slots.
+        boolean alreadyBooked =
+                requestRepository
+                        .existsByProviderIdAndRequestedDateAndRequestedTimeAndStatusIn(
+                                provider.getId(),
+                                date,
+                                time,
+                                List.of("CONFIRMED", "ACCEPTED", "IN_PROGRESS")
+                        );
+
+        if (alreadyBooked) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("This time is already booked. Please select another time.");
+        }
+
+        boolean isReschedule = "SCHEDULED".equals(request.getServiceType());
+
         request.setProposedDate(date);
         request.setProposedTime(time);
-        request.setStatus("TIME_PROPOSED");
+
+        if (isReschedule) {
+            request.setStatus("RESCHEDULE_PROPOSED");
+        } else {
+            request.setStatus("TIME_PROPOSED");
+        }
 
         ServiceRequest savedRequest = requestRepository.save(request);
 
+        String title = isReschedule
+                ? "New Appointment Time Proposed"
+                : "Appointment Time Proposed";
+
+        String message = provider.getName()
+                + " proposed " + date + " at " + time
+                + ". Please review and confirm or decline this time.";
+
         createNotification(
                 request.getCustomer(),
-                "Appointment Time Proposed",
-                provider.getName() + " proposed "
-                        + date + " at " + time
-                        + ". Review the proposed time in SkillLink.",
-                "TIME_PROPOSED",
+                title,
+                message,
+                isReschedule ? "RESCHEDULE_PROPOSED" : "TIME_PROPOSED",
                 savedRequest.getId()
         );
 
@@ -572,7 +527,7 @@ public class ServiceRequestController {
     }
 
     // =========================================================
-    // CUSTOMER CONFIRMS THE PROPOSED TIME
+    // CUSTOMER CONFIRMS PROPOSED TIME
     // =========================================================
 
     @PutMapping("/confirm-time/{id}")
@@ -601,19 +556,20 @@ public class ServiceRequestController {
 
         if (request.getCustomer() == null
                 || !request.getCustomer().getId().equals(customer.getId())) {
-
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("You can only confirm your own requests.");
         }
 
-        if (!"TIME_PROPOSED".equals(request.getStatus())) {
+        String currentStatus = request.getStatus();
+
+        if (!"TIME_PROPOSED".equals(currentStatus)
+                && !"RESCHEDULE_PROPOSED".equals(currentStatus)) {
             return ResponseEntity.badRequest()
                     .body("There is no proposed time to confirm.");
         }
 
         if (request.getProposedDate() == null
                 || request.getProposedTime() == null) {
-
             return ResponseEntity.badRequest()
                     .body("The provider has not proposed a complete appointment time.");
         }
@@ -621,14 +577,13 @@ public class ServiceRequestController {
         LocalDate date = request.getProposedDate();
         LocalTime time = request.getProposedTime();
 
-        if (date.isBefore(LocalDate.now())
-                || (date.equals(LocalDate.now())
-                && !time.isAfter(LocalTime.now()))) {
-
+        if (!isFutureDateTime(date, time)) {
             return ResponseEntity.badRequest()
                     .body("The proposed time has passed. Please ask the provider for a new time.");
         }
 
+        // Recheck booking conflict when customer confirms.
+        // Do not check normal provider availability slots here.
         boolean alreadyBooked =
                 requestRepository
                         .existsByProviderIdAndRequestedDateAndRequestedTimeAndStatusIn(
@@ -645,6 +600,8 @@ public class ServiceRequestController {
 
         request.setRequestedDate(date);
         request.setRequestedTime(time);
+        request.setProposedDate(null);
+        request.setProposedTime(null);
         request.setStatus("CONFIRMED");
 
         ServiceRequest savedRequest = requestRepository.save(request);
@@ -652,7 +609,7 @@ public class ServiceRequestController {
         createNotification(
                 request.getProvider(),
                 "Appointment Confirmed",
-                customer.getName() + " confirmed your proposed appointment.",
+                customer.getName() + " confirmed the proposed appointment.",
                 "APPOINTMENT_CONFIRMED",
                 savedRequest.getId()
         );
@@ -669,6 +626,310 @@ public class ServiceRequestController {
     }
 
     // =========================================================
+    // CUSTOMER DECLINES PROPOSED TIME
+    // =========================================================
+
+    @PutMapping("/decline-time/{id}")
+    public ResponseEntity<?> declineTime(
+            @PathVariable Long id,
+            @RequestParam String email
+    ) {
+
+        Optional<ServiceRequest> optionalRequest =
+                requestRepository.findById(id);
+
+        if (optionalRequest.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Service request not found");
+        }
+
+        Optional<User> optionalCustomer = userRepository.findByEmail(email);
+
+        if (optionalCustomer.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Customer not found");
+        }
+
+        ServiceRequest request = optionalRequest.get();
+        User customer = optionalCustomer.get();
+
+        if (request.getCustomer() == null
+                || !request.getCustomer().getId().equals(customer.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You can only update your own requests.");
+        }
+
+        if (!"TIME_PROPOSED".equals(request.getStatus())
+                && !"RESCHEDULE_PROPOSED".equals(request.getStatus())) {
+            return ResponseEntity.badRequest()
+                    .body("There is no proposed time to decline.");
+        }
+
+        request.setProposedDate(null);
+        request.setProposedTime(null);
+        request.setStatus("NEGOTIATING");
+
+        ServiceRequest savedRequest = requestRepository.save(request);
+
+        createNotification(
+                request.getProvider(),
+                "Proposed Time Declined",
+                customer.getName()
+                        + " declined your proposed time. You can propose another time.",
+                "TIME_DECLINED",
+                savedRequest.getId()
+        );
+
+        return ResponseEntity.ok(savedRequest);
+    }
+
+    // =========================================================
+// CUSTOMER PROPOSES A NEW DATE AND TIME
+// =========================================================
+
+    @PutMapping("/customer-propose-time/{id}")
+    public ResponseEntity<?> customerProposeTime(
+            @PathVariable Long id,
+            @RequestParam String email,
+            @RequestParam String proposedDate,
+            @RequestParam String proposedTime
+    ) {
+
+        Optional<ServiceRequest> optionalRequest =
+                requestRepository.findById(id);
+
+        if (optionalRequest.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Service request not found");
+        }
+
+        Optional<User> optionalCustomer = userRepository.findByEmail(email);
+
+        if (optionalCustomer.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Customer not found");
+        }
+
+        ServiceRequest request = optionalRequest.get();
+        User customer = optionalCustomer.get();
+
+        if (request.getCustomer() == null
+                || !request.getCustomer().getId().equals(customer.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You can only update your own requests.");
+        }
+
+        if (!"NEGOTIATING".equals(request.getStatus())) {
+            return ResponseEntity.badRequest()
+                    .body("You can only propose a time while negotiating.");
+        }
+
+        LocalDate date;
+        LocalTime time;
+
+        try {
+            date = LocalDate.parse(proposedDate);
+            time = LocalTime.parse(proposedTime);
+        } catch (DateTimeParseException e) {
+            return ResponseEntity.badRequest()
+                    .body("Invalid date or time. Use yyyy-MM-dd and HH:mm.");
+        }
+
+        if (!isFutureDateTime(date, time)) {
+            return ResponseEntity.badRequest()
+                    .body("Please select a future date and time.");
+        }
+
+        request.setProposedDate(date);
+        request.setProposedTime(time);
+        request.setStatus("CUSTOMER_TIME_PROPOSED");
+
+        ServiceRequest savedRequest = requestRepository.save(request);
+
+        createNotification(
+                request.getProvider(),
+                "Customer Proposed a New Time",
+                customer.getName() + " proposed " + date + " at " + time
+                        + ". Please review the proposed appointment time.",
+                "CUSTOMER_TIME_PROPOSED",
+                savedRequest.getId()
+        );
+
+        return ResponseEntity.ok(savedRequest);
+    }
+
+    // =========================================================
+// PROVIDER ACCEPTS CUSTOMER-PROPOSED DATE AND TIME
+// =========================================================
+
+    @PutMapping("/accept-customer-time/{id}")
+    public ResponseEntity<?> acceptCustomerTime(
+            @PathVariable Long id,
+            @RequestParam String email
+    ) {
+
+        Optional<ServiceRequest> optionalRequest =
+                requestRepository.findById(id);
+
+        if (optionalRequest.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Service request not found.");
+        }
+
+        Optional<User> optionalProvider = userRepository.findByEmail(email);
+
+        if (optionalProvider.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Provider not found.");
+        }
+
+        ServiceRequest request = optionalRequest.get();
+        User provider = optionalProvider.get();
+
+        // Verify request ownership
+        if (request.getProvider() == null
+                || !request.getProvider().getId().equals(provider.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You can only update your own requests.");
+        }
+
+        // Verify provider approval
+        if (!isProviderApproved(provider)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Your provider account is not approved.");
+        }
+
+        // Check request status
+        if (!"CUSTOMER_TIME_PROPOSED".equals(request.getStatus())) {
+            return ResponseEntity.badRequest()
+                    .body("There is no customer-proposed time to accept.");
+        }
+
+        // Check proposed date and time
+        LocalDate date = request.getProposedDate();
+        LocalTime time = request.getProposedTime();
+
+        if (date == null || time == null) {
+            return ResponseEntity.badRequest()
+                    .body("The customer's proposed date and time are missing.");
+        }
+
+        if (!isFutureDateTime(date, time)) {
+            return ResponseEntity.badRequest()
+                    .body("The proposed appointment time has passed.");
+        }
+
+        // Check whether another booking already occupies this time
+        boolean alreadyBooked =
+                requestRepository
+                        .existsByProviderIdAndRequestedDateAndRequestedTimeAndStatusIn(
+                                provider.getId(),
+                                date,
+                                time,
+                                List.of("CONFIRMED", "ACCEPTED", "IN_PROGRESS")
+                        );
+
+        if (alreadyBooked) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("This time is already booked. Please ask the customer for another time.");
+        }
+
+        // Confirm the customer's proposed appointment
+        request.setRequestedDate(date);
+        request.setRequestedTime(time);
+
+        request.setProposedDate(null);
+        request.setProposedTime(null);
+
+        request.setStatus("CONFIRMED");
+
+        ServiceRequest savedRequest = requestRepository.save(request);
+
+        // Notify customer
+        createNotification(
+                request.getCustomer(),
+                "Appointment Time Accepted",
+                provider.getName()
+                        + " accepted your proposed appointment on "
+                        + date + " at " + time + ".",
+                "CUSTOMER_TIME_ACCEPTED",
+                savedRequest.getId()
+        );
+
+        return ResponseEntity.ok(savedRequest);
+    }
+
+    // =========================================================
+// PROVIDER DECLINES CUSTOMER-PROPOSED DATE AND TIME
+// =========================================================
+
+    @PutMapping("/decline-customer-time/{id}")
+    public ResponseEntity<?> declineCustomerTime(
+            @PathVariable Long id,
+            @RequestParam String email
+    ) {
+
+        Optional<ServiceRequest> optionalRequest =
+                requestRepository.findById(id);
+
+        if (optionalRequest.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Service request not found.");
+        }
+
+        Optional<User> optionalProvider = userRepository.findByEmail(email);
+
+        if (optionalProvider.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Provider not found.");
+        }
+
+        ServiceRequest request = optionalRequest.get();
+        User provider = optionalProvider.get();
+
+        // Verify request ownership
+        if (request.getProvider() == null
+                || !request.getProvider().getId().equals(provider.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You can only update your own requests.");
+        }
+
+        // Verify provider approval
+        if (!isProviderApproved(provider)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Your provider account is not approved.");
+        }
+
+        // Check request status
+        if (!"CUSTOMER_TIME_PROPOSED".equals(request.getStatus())) {
+            return ResponseEntity.badRequest()
+                    .body("There is no customer-proposed time to decline.");
+        }
+
+        // Clear proposed appointment
+        request.setProposedDate(null);
+        request.setProposedTime(null);
+
+        // Continue negotiation
+        request.setStatus("NEGOTIATING");
+
+        ServiceRequest savedRequest = requestRepository.save(request);
+
+        // Notify customer
+        createNotification(
+                request.getCustomer(),
+                "Proposed Time Declined",
+                provider.getName()
+                        + " declined your proposed appointment time. "
+                        + "You can discuss another suitable time.",
+                "CUSTOMER_TIME_DECLINED",
+                savedRequest.getId()
+        );
+
+        return ResponseEntity.ok(savedRequest);
+    }
+
+    // =========================================================
     // UPDATE REQUEST STATUS
     // =========================================================
 
@@ -676,7 +937,8 @@ public class ServiceRequestController {
     public ResponseEntity<?> updateStatus(
             @PathVariable Long id,
             @RequestParam String email,
-            @RequestParam String status
+            @RequestParam String status,
+            @RequestParam(required = false) String reason
     ) {
 
         Optional<ServiceRequest> optionalRequest =
@@ -699,67 +961,112 @@ public class ServiceRequestController {
 
         if (request.getProvider() == null
                 || !request.getProvider().getId().equals(provider.getId())) {
-
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("You can only update your own requests.");
         }
 
-        if (!status.equals("ACCEPTED")
-                && !status.equals("REJECTED")
-                && !status.equals("COMPLETED")
-                && !status.equals("IN_PROGRESS")) {
+        String newStatus = status.trim().toUpperCase();
 
+        if (!newStatus.equals("ACCEPTED")
+                && !newStatus.equals("REJECTED")
+                && !newStatus.equals("COMPLETED")
+                && !newStatus.equals("IN_PROGRESS")) {
             return ResponseEntity.badRequest()
                     .body("Invalid status.");
         }
 
-        if (status.equals("ACCEPTED")) {
+        if (!isProviderApproved(provider)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Your provider account is not approved.");
+        }
 
-            if (!isProviderApproved(provider)) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body("Your provider account is not approved yet.");
-            }
+        // ACCEPT SCHEDULED REQUEST DIRECTLY
+        if (newStatus.equals("ACCEPTED")) {
 
-            if ("SCHEDULED".equals(request.getServiceType())
-                    || "ON_DEMAND".equals(request.getServiceType())) {
-
-                if (!"PENDING".equals(request.getStatus())
-                        && !"NEGOTIATING".equals(request.getStatus())) {
-
-                    return ResponseEntity.badRequest()
-                            .body("This request cannot be accepted in its current status.");
-                }
-
+            if (!"SCHEDULED".equals(request.getServiceType())) {
                 return ResponseEntity.badRequest()
-                        .body("Please propose an appointment time first using /propose-time/{id}.");
+                        .body("For ON_DEMAND requests, use /propose-time/{id} to set an appointment time.");
             }
+
+            if (!"PENDING".equals(request.getStatus())
+                    && !"NEGOTIATING".equals(request.getStatus())) {
+                return ResponseEntity.badRequest()
+                        .body("This request cannot be accepted in its current status.");
+            }
+
+            LocalDate date = request.getRequestedDate();
+            LocalTime time = request.getRequestedTime();
+
+            if (date == null || time == null) {
+                return ResponseEntity.badRequest()
+                        .body("The customer's requested date and time are missing.");
+            }
+
+            if (!isFutureDateTime(date, time)) {
+                return ResponseEntity.badRequest()
+                        .body("The requested appointment time has passed.");
+            }
+
+            if (!isProviderAvailable(provider.getId(), date, time)) {
+                return ResponseEntity.badRequest()
+                        .body("Provider is not available at the requested date and time.");
+            }
+
+            boolean alreadyBooked =
+                    requestRepository
+                            .existsByProviderIdAndRequestedDateAndRequestedTimeAndStatusIn(
+                                    provider.getId(),
+                                    date,
+                                    time,
+                                    List.of("CONFIRMED", "ACCEPTED", "IN_PROGRESS")
+                            );
+
+            if (alreadyBooked) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body("This appointment time is already booked.");
+            }
+
+            request.setStatus("ACCEPTED");
+            request.setRejectionReason(null);
+
+        } else if (newStatus.equals("REJECTED")) {
+
+            if (!"PENDING".equals(request.getStatus())
+                    && !"NEGOTIATING".equals(request.getStatus())) {
+                return ResponseEntity.badRequest()
+                        .body("Only pending or negotiating requests can be rejected.");
+            }
+
+            if (reason == null || reason.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body("A rejection reason is required.");
+            }
+
+            request.setRejectionReason(reason.trim());
+            request.setProposedDate(null);
+            request.setProposedTime(null);
+            request.setStatus("REJECTED");
+
+        } else if (newStatus.equals("IN_PROGRESS")) {
+
+            if (!"CONFIRMED".equals(request.getStatus())
+                    && !"ACCEPTED".equals(request.getStatus())) {
+                return ResponseEntity.badRequest()
+                        .body("Only confirmed or accepted bookings can be started.");
+            }
+
+            request.setStatus("IN_PROGRESS");
+
+        } else if (newStatus.equals("COMPLETED")) {
+
+            if (!"IN_PROGRESS".equals(request.getStatus())
+                    && !"ACCEPTED".equals(request.getStatus())) {
+                return ResponseEntity.badRequest()
+                        .body("Only started bookings can be completed.");
+            }
+
+            request.setStatus("COMPLETED");
         }
-
-        if (status.equals("REJECTED")
-                && !"PENDING".equals(request.getStatus())
-                && !"NEGOTIATING".equals(request.getStatus())) {
-
-            return ResponseEntity.badRequest()
-                    .body("Only pending or negotiating requests can be rejected.");
-        }
-
-        if (status.equals("IN_PROGRESS")
-                && !"CONFIRMED".equals(request.getStatus())
-                && !"ACCEPTED".equals(request.getStatus())) {
-
-            return ResponseEntity.badRequest()
-                    .body("Only confirmed bookings can be started.");
-        }
-
-        if (status.equals("COMPLETED")
-                && !"IN_PROGRESS".equals(request.getStatus())
-                && !"ACCEPTED".equals(request.getStatus())) {
-
-            return ResponseEntity.badRequest()
-                    .body("Only started bookings can be completed.");
-        }
-
-        request.setStatus(status);
 
         ServiceRequest updatedRequest = requestRepository.save(request);
 
@@ -769,12 +1076,20 @@ public class ServiceRequestController {
         String message;
         String notificationType;
 
-        switch (status) {
+        switch (newStatus) {
+
+            case "ACCEPTED" -> {
+                title = "Request Accepted";
+                message = provider.getName()
+                        + " accepted your requested appointment date and time.";
+                notificationType = "REQUEST_ACCEPTED";
+            }
 
             case "REJECTED" -> {
                 title = "Request Rejected";
-                message = "Your service request has been rejected by "
-                        + provider.getName();
+                message = provider.getName()
+                        + " rejected your service request. Reason: "
+                        + request.getRejectionReason();
                 notificationType = "REQUEST_REJECTED";
             }
 
@@ -793,7 +1108,7 @@ public class ServiceRequestController {
 
             default -> {
                 title = "Request Updated";
-                message = "Your service request status is now " + status + ".";
+                message = "Your service request status is now " + newStatus + ".";
                 notificationType = "REQUEST_UPDATED";
             }
         }
@@ -840,7 +1155,58 @@ public class ServiceRequestController {
     }
 
     // =========================================================
-    // HELPER METHODS
+    // CHECK PROVIDER AVAILABILITY
+    // =========================================================
+
+    private boolean isProviderAvailable(
+            Long providerId,
+            LocalDate date,
+            LocalTime time
+    ) {
+
+        DayOfWeek day = date.getDayOfWeek();
+
+        List<ProviderAvailability> dateSlots =
+                availabilityRepository.findByProviderIdAndSpecificDate(
+                        providerId, date
+                );
+
+        List<ProviderAvailability> slots;
+
+        if (!dateSlots.isEmpty()) {
+            slots = dateSlots.stream()
+                    .filter(ProviderAvailability::isAvailable)
+                    .toList();
+        } else {
+            slots = availabilityRepository
+                    .findByProviderIdAndDayOfWeekAndAvailableTrue(
+                            providerId, day
+                    );
+        }
+
+        return slots.stream().anyMatch(slot ->
+                !time.isBefore(slot.getStartTime())
+                        && time.isBefore(slot.getEndTime())
+        );
+    }
+
+    // =========================================================
+    // CHECK FUTURE DATE AND TIME
+    // =========================================================
+
+    private boolean isFutureDateTime(LocalDate date, LocalTime time) {
+
+        if (date == null || time == null) {
+            return false;
+        }
+
+        return date.isAfter(LocalDate.now())
+                || (date.equals(LocalDate.now())
+                && time.isAfter(LocalTime.now()));
+    }
+
+    // =========================================================
+    // CHECK PROVIDER APPROVAL
     // =========================================================
 
     private boolean isProviderApproved(User provider) {
@@ -852,6 +1218,10 @@ public class ServiceRequestController {
                 && profile.get().getApprovalStatus()
                 == ProviderApprovalStatus.APPROVED;
     }
+
+    // =========================================================
+    // CREATE NOTIFICATION
+    // =========================================================
 
     private void createNotification(
             User user,
@@ -876,15 +1246,11 @@ public class ServiceRequestController {
         String token = user.getFcmToken();
 
         if (token != null && !token.isBlank()) {
-
             try {
-
                 firebaseMessagingService.sendPushNotification(
                         token, title, message
                 );
-
             } catch (Exception e) {
-
                 System.err.println(
                         "Push notification failed: " + e.getMessage()
                 );

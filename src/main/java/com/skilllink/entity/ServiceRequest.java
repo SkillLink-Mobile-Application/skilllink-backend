@@ -1,3 +1,4 @@
+
 package com.skilllink.entity;
 
 import jakarta.persistence.*;
@@ -30,10 +31,12 @@ public class ServiceRequest {
     @Column(name = "service_type", length = 20)
     private String serviceType = "SCHEDULED";
 
+    // Customer's originally requested appointment
     private LocalDate requestedDate;
 
     private LocalTime requestedTime;
 
+    // Provider's proposed appointment time
     private LocalDate proposedDate;
 
     private LocalTime proposedTime;
@@ -50,6 +53,10 @@ public class ServiceRequest {
 
     @Column(length = 30)
     private String status = "PENDING";
+
+    // Reason provided by provider when rejecting a request
+    @Column(name = "rejection_reason", length = 1000)
+    private String rejectionReason;
 
     // Optional service request photos
     @ElementCollection
@@ -173,6 +180,14 @@ public class ServiceRequest {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
     }
 
     public List<String> getPhotos() {
