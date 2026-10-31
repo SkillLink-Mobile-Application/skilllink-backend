@@ -1,3 +1,4 @@
+
 package com.skilllink.filter;
 
 import io.jsonwebtoken.Claims;
@@ -51,7 +52,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
 
         try {
-
             Claims claims = Jwts.parser()
                     .verifyWith(getSigningKey())
                     .build()
@@ -60,15 +60,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             String email = claims.getSubject();
 
-            List<String> roles =
-                    claims.get("roles", List.class);
+            Object rolesClaim = claims.get("roles");
+
+            if (!(rolesClaim instanceof List<?> rolesList)) {
+                throw new IllegalArgumentException("Invalid roles claim");
+            }
+
+            List<String> roles = rolesList.stream()
+                    .filter(String.class::isInstance)
+                    .map(String.class::cast)
+                    .collect(Collectors.toList());
+
+            if (roles.isEmpty() || roles.size() != rolesList.size()) {
+                throw new IllegalArgumentException("Invalid roles claim");
+            }
 
             var authorities = roles.stream()
-                    .map(role ->
-                            new SimpleGrantedAuthority(
-                                    "ROLE_" + role
-                            )
-                    )
+                    .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
                     .collect(Collectors.toList());
 
             UsernamePasswordAuthenticationToken authentication =
@@ -78,16 +86,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             authorities
                     );
 
-            SecurityContextHolder
-                    .getContext()
+            SecurityContextHolder.getContext()
                     .setAuthentication(authentication);
 
             System.out.println(
-                    "Authenticated user: " + email
-                            + " | Roles: " + roles
+                    "Authenticated user: " + email +
+                            " | Roles: " + roles
             );
 
         } catch (Exception e) {
+
+            SecurityContextHolder.clearContext();
 
             response.setStatus(
                     HttpServletResponse.SC_UNAUTHORIZED

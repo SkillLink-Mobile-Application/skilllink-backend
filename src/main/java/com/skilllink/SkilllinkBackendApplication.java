@@ -9,8 +9,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @SpringBootApplication
 public class SkilllinkBackendApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(SkilllinkBackendApplication.class, args);
+    static void main(String[] args) {
+         SpringApplication.run(SkilllinkBackendApplication.class, args);
     }
 
 
