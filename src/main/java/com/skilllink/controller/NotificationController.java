@@ -3,8 +3,11 @@ package com.skilllink.controller;
 
 import com.skilllink.entity.Notification;
 import com.skilllink.entity.User;
+import com.skilllink.entity.ChatMessage;
+
 import com.skilllink.repository.NotificationRepository;
 import com.skilllink.repository.UserRepository;
+import com.skilllink.repository.ChatMessageRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,13 +26,16 @@ public class NotificationController {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final ChatMessageRepository chatMessageRepository;
 
     public NotificationController(
             NotificationRepository notificationRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            ChatMessageRepository chatMessageRepository
     ) {
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
+        this.chatMessageRepository = chatMessageRepository;
     }
 
     // ==================== Get Notifications ====================
@@ -245,6 +251,30 @@ public class NotificationController {
         response.put("createdAt", notification.getCreatedAt());
         response.put("type", notification.getType());
         response.put("referenceId", notification.getReferenceId());
+
+        // Add sender details for chat notifications
+        if ("NEW_MESSAGE".equalsIgnoreCase(notification.getType())
+                && notification.getReferenceId() != null) {
+
+            Optional<ChatMessage> optionalMessage =
+                    chatMessageRepository.findById(
+                            notification.getReferenceId()
+                    );
+
+            if (optionalMessage.isPresent()) {
+                ChatMessage chatMessage = optionalMessage.get();
+
+                response.put(
+                        "senderEmail",
+                        chatMessage.getSender().getEmail()
+                );
+
+                response.put(
+                        "senderName",
+                        chatMessage.getSender().getName()
+                );
+            }
+        }
 
         return response;
     }
