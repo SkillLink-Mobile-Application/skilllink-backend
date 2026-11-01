@@ -1,9 +1,11 @@
+
 package com.skilllink.entity;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.skilllink.enums.Role;
 import jakarta.persistence.*;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,10 +33,22 @@ public class User {
     @Column(length = 500)
     private String fcmToken;
 
+    // ==================== Email Verification ====================
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified = true;
+
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Column(name = "email_verification_token")
+    private String emailVerificationToken;
+
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Column(name = "email_verification_token_expiry")
+    private LocalDateTime emailVerificationTokenExpiry;
+
     /*
      * This field is used only to receive the role
      * from the registration request.
-     *
      * It will NOT be stored as a column in the users table.
      */
     @Transient
@@ -63,6 +77,8 @@ public class User {
         this.phone = phone;
     }
 
+    // ==================== ID Get/Set ====================
+
     public Long getId() {
         return id;
     }
@@ -70,6 +86,8 @@ public class User {
     public void setId(Long id) {
         this.id = id;
     }
+
+    // ==================== Name Get/Set ====================
 
     public String getName() {
         return name;
@@ -79,6 +97,8 @@ public class User {
         this.name = name;
     }
 
+    // ==================== Email Get/Set ====================
+
     public String getEmail() {
         return email;
     }
@@ -86,6 +106,8 @@ public class User {
     public void setEmail(String email) {
         this.email = email;
     }
+
+    // ==================== Password Get/Set ====================
 
     public String getPassword() {
         return password;
@@ -95,6 +117,8 @@ public class User {
         this.password = password;
     }
 
+    // ==================== Phone Get/Set ====================
+
     public String getPhone() {
         return phone;
     }
@@ -102,6 +126,8 @@ public class User {
     public void setPhone(String phone) {
         this.phone = phone;
     }
+
+    // ==================== Profile Image Get/Set ====================
 
     public String getProfileImage() {
         return profileImage;
@@ -121,6 +147,36 @@ public class User {
         this.fcmToken = fcmToken;
     }
 
+    // ==================== Email Verification Get/Set ====================
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
+    }
+
+    public String getEmailVerificationToken() {
+        return emailVerificationToken;
+    }
+
+    public void setEmailVerificationToken(String emailVerificationToken) {
+        this.emailVerificationToken = emailVerificationToken;
+    }
+
+    public LocalDateTime getEmailVerificationTokenExpiry() {
+        return emailVerificationTokenExpiry;
+    }
+
+    public void setEmailVerificationTokenExpiry(
+            LocalDateTime emailVerificationTokenExpiry
+    ) {
+        this.emailVerificationTokenExpiry = emailVerificationTokenExpiry;
+    }
+
+    // ==================== Role Get/Set ====================
+
     public Role getRole() {
         return role;
     }
@@ -128,6 +184,8 @@ public class User {
     public void setRole(Role role) {
         this.role = role;
     }
+
+    // ==================== User Roles Get/Set ====================
 
     public List<UserRole> getRoles() {
         return roles;
