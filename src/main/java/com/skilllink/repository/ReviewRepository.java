@@ -16,4 +16,8 @@ public interface ReviewRepository
     List<Review> findByProviderEmail(
             String email
     );
+
+    List<Review> findByCustomerId(Long customerId);
+
+    List<Review> findByProviderId(Long providerId);
 }

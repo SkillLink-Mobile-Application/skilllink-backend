@@ -20,5 +20,10 @@ public interface ServiceRequestRepository
             List<String> statuses
     );
 
+    List<ServiceRequest> findByCustomerIdOrProviderId(
+            Long customerId,
+            Long providerId
+    );
+
 }
 

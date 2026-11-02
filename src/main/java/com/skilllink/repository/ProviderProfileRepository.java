@@ -17,4 +17,6 @@ public interface ProviderProfileRepository
     List<ProviderProfile> findByApprovalStatus(
             ProviderApprovalStatus approvalStatus
     );
+
+    void deleteByUserId(Long userId);
 }

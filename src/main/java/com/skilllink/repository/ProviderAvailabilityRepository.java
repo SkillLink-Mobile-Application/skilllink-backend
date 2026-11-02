@@ -34,4 +34,6 @@ public interface ProviderAvailabilityRepository
             Long providerId,
             LocalDate specificDate
     );
+
+    void deleteByProviderId(Long providerId);
 }

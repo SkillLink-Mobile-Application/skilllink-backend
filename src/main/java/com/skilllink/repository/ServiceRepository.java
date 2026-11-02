@@ -27,4 +27,6 @@ public interface ServiceRepository extends JpaRepository<Service, Long> {
             @Param("category") String category,
             @Param("approvalStatus") ProviderApprovalStatus approvalStatus
     );
+
+    void deleteByProviderId(Long providerId);
 }

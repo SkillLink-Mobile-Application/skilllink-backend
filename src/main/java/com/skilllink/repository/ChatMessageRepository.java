@@ -14,4 +14,6 @@ public interface ChatMessageRepository
             Long receiverId2,
             Long senderId2
     );
+
+    void deleteBySenderIdOrReceiverId(Long senderId, Long receiverId);
 }
