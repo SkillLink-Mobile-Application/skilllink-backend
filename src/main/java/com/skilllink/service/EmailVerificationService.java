@@ -1,8 +1,8 @@
-
 package com.skilllink.service;
 
 import com.skilllink.entity.User;
 import com.skilllink.repository.UserRepository;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -17,11 +17,11 @@ public class EmailVerificationService {
     private final JavaMailSender mailSender;
     private final UserRepository userRepository;
 
-    @Value("${spring.mail.username}")
+    @Value("${app.mail.from}")
     private String senderEmail;
 
-    // Change this later to your deployed frontend URL.
-    @Value("${app.verification.base-url:http://localhost:8080}")    private String verificationBaseUrl;
+    @Value("${app.verification.base-url:http://localhost:8080}")
+    private String verificationBaseUrl;
 
     public EmailVerificationService(
             JavaMailSender mailSender,
@@ -43,10 +43,11 @@ public class EmailVerificationService {
 
         userRepository.save(user);
 
-        String verificationLink =
-                verificationBaseUrl
-                        + "/api/users/verify-email?token="
-                        + token;
+        String baseUrl = verificationBaseUrl.replaceAll("/+$", "");
+
+        String verificationLink = baseUrl
+                + "/api/users/verify-email?token="
+                + token;
 
         SimpleMailMessage message = new SimpleMailMessage();
 
@@ -61,7 +62,8 @@ public class EmailVerificationService {
                         + verificationLink + "\n\n"
                         + "This link will expire in 24 hours.\n\n"
                         + "If you did not create this account, please ignore this email.\n\n"
-                        + "Thank you,\nSkillLink Team"
+                        + "Thank you,\n"
+                        + "SkillLink Team"
         );
 
         mailSender.send(message);

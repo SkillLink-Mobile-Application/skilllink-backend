@@ -3,5 +3,6 @@ package com.skilllink.enums;
 public enum Role {
     CUSTOMER,
     PROVIDER,
-    ADMIN
+    ADMIN,
+    SUPER_ADMIN
 }

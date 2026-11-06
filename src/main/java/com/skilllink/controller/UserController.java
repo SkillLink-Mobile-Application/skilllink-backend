@@ -1,4 +1,3 @@
-
 package com.skilllink.controller;
 
 import com.skilllink.entity.User;
@@ -140,6 +139,43 @@ public class UserController {
         );
     }
 
+    // ================= RESEND VERIFICATION EMAIL =================
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<?> resendVerificationEmail(
+            @RequestBody Map<String, String> request
+    ) {
+        String email = request.get("email");
+
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Email is required"));
+        }
+
+        email = email.trim().toLowerCase();
+
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+
+        String responseMessage =
+                "If your account exists and is not verified, a verification email will be sent.";
+
+        if (optionalUser.isEmpty()) {
+            return ResponseEntity.ok(Map.of("message", responseMessage));
+        }
+
+        User user = optionalUser.get();
+
+        if (user.isEmailVerified()) {
+            return ResponseEntity.ok(Map.of(
+                    "message", "This email is already verified. You can log in."
+            ));
+        }
+
+        emailVerificationService.sendVerificationEmail(user);
+
+        return ResponseEntity.ok(Map.of("message", responseMessage));
+    }
+
     // ================= LOGIN =================
 
     @PostMapping("/login")
@@ -159,6 +195,12 @@ public class UserController {
             if (!authenticatedUser.isEmailVerified()) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body("Please verify your email before logging in.");
+            }
+
+            // Accounts blocked by an admin cannot log in.
+            if (authenticatedUser.isBlocked()) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Your account has been blocked. Please contact SkillLink support.");
             }
 
             String token = jwtService.generateToken(authenticatedUser);

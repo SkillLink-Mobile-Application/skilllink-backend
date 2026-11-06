@@ -1,4 +1,3 @@
-
 package com.skilllink.entity;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -32,6 +31,16 @@ public class User {
 
     @Column(length = 500)
     private String fcmToken;
+
+    // ==================== Account Block (admin) ====================
+
+    @Column(name = "blocked", nullable = false, columnDefinition = "boolean default false")
+    private boolean blocked = false;
+
+    // ==================== Forced password change (new admins) ====================
+
+    @Column(name = "must_change_password", nullable = false, columnDefinition = "boolean default false")
+    private boolean mustChangePassword = false;
 
     // ==================== Email Verification ====================
 
@@ -145,6 +154,26 @@ public class User {
 
     public void setFcmToken(String fcmToken) {
         this.fcmToken = fcmToken;
+    }
+
+    // ==================== Blocked Get/Set ====================
+
+    public boolean isBlocked() {
+        return blocked;
+    }
+
+    public void setBlocked(boolean blocked) {
+        this.blocked = blocked;
+    }
+
+    // ==================== Must Change Password Get/Set ====================
+
+    public boolean isMustChangePassword() {
+        return mustChangePassword;
+    }
+
+    public void setMustChangePassword(boolean mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
     }
 
     // ==================== Email Verification Get/Set ====================
