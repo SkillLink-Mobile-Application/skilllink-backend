@@ -114,12 +114,22 @@ public class AdminService {
     }
 
     private UserRow toUserRow(User u) {
-        String role = hasRole(u, Role.PROVIDER) ? "Provider" : "Customer";
+
+        List<String> roles = u.getRoles().stream()
+                .map(UserRole::getRole)
+                .filter(role -> role == Role.CUSTOMER || role == Role.PROVIDER)
+                .distinct()
+                .sorted(Comparator.comparingInt(role ->
+                        role == Role.CUSTOMER ? 1 : 2
+                ))
+                .map(role -> role == Role.CUSTOMER ? "Customer" : "Provider")
+                .toList();
+
         return new UserRow(
                 u.getId(),
                 displayName(u),
                 u.getEmail(),
-                role,
+                roles,
                 u.isBlocked() ? "Blocked" : "Active"
         );
     }

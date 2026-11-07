@@ -21,7 +21,7 @@ public final class AdminDtos {
             Long id,
             String name,
             String email,
-            String role,
+            List<String> roles,
             String status
     ) {
     }
