@@ -70,6 +70,7 @@ public class SecurityConfig {
                         .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers("/api/users/profile").permitAll()
                         .requestMatchers("/api/customer-profile/upload-image").permitAll()
+                        .requestMatchers("/healthz").permitAll()
                         .requestMatchers("/error").permitAll()
 
                         // Admin management is Super Admin only (must come before /api/admin/**)
