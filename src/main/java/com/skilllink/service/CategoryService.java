@@ -25,6 +25,7 @@ public class CategoryService {
         return categoryRepository.findByActiveTrue();
     }
 
+    @Transactional
     public Category addCategory(Category category) {
 
         if (category.getName() == null ||
@@ -41,9 +42,16 @@ public class CategoryService {
         category.setName(name);
         category.setActive(true);
 
+        // Default to icon when no image is provided
+        if (category.getImageUrl() != null &&
+                !category.getImageUrl().trim().isEmpty()) {
+            category.setIcon(null);
+        }
+
         return categoryRepository.save(category);
     }
 
+    @Transactional
     public Category updateCategory(Long id, Category updatedCategory) {
 
         Category existing = categoryRepository.findById(id)
@@ -65,11 +73,22 @@ public class CategoryService {
         }
 
         existing.setName(name);
-        existing.setIcon(updatedCategory.getIcon());
+        existing.setDescription(updatedCategory.getDescription());
+
+        String imageUrl = updatedCategory.getImageUrl();
+
+        if (imageUrl != null && !imageUrl.trim().isEmpty()) {
+            existing.setImageUrl(imageUrl.trim());
+            existing.setIcon(null);
+        } else {
+            existing.setImageUrl(null);
+            existing.setIcon(updatedCategory.getIcon());
+        }
 
         return categoryRepository.save(existing);
     }
 
+    @Transactional
     public Category updateStatus(Long id, boolean active) {
 
         Category category = categoryRepository.findById(id)

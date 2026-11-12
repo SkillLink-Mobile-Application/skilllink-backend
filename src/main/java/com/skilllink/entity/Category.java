@@ -14,7 +14,17 @@ public class Category {
     @Column(nullable = false, unique = true)
     private String name;
 
+    // Predefined icon name (e.g. zap, wrench, hammer)
+    @Column(length = 100)
     private String icon;
+
+    // Short description displayed in category cards
+    @Column(length = 500)
+    private String description;
+
+    // Cloudinary image URL (optional)
+    @Column(length = 1000)
+    private String imageUrl;
 
     @Column(nullable = false)
     private boolean active = true;
@@ -50,6 +60,22 @@ public class Category {
 
     public void setIcon(String icon) {
         this.icon = icon;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public boolean isActive() {

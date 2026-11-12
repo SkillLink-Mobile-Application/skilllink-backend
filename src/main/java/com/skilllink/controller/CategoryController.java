@@ -3,10 +3,13 @@ package com.skilllink.controller;
 
 import com.skilllink.entity.Category;
 import com.skilllink.service.CategoryService;
+import com.skilllink.service.CategoryImageService;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -16,9 +19,13 @@ import java.util.Map;
 public class CategoryController {
 
     private final CategoryService categoryService;
+    private final CategoryImageService categoryImageService;
 
-    public CategoryController(CategoryService categoryService) {
+    public CategoryController(
+            CategoryService categoryService,
+            CategoryImageService categoryImageService) {
         this.categoryService = categoryService;
+        this.categoryImageService = categoryImageService;
     }
 
     // CUSTOMER & PROVIDER: Get active categories
@@ -27,7 +34,9 @@ public class CategoryController {
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public ResponseEntity<List<Category>> getActiveCategories() {
-        return ResponseEntity.ok(categoryService.getActiveCategories());
+        return ResponseEntity.ok(
+                categoryService.getActiveCategories()
+        );
     }
 
     // ADMIN: Get all categories
@@ -46,7 +55,8 @@ public class CategoryController {
         try {
             Category saved = categoryService.addCategory(category);
 
-            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(saved);
 
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
@@ -71,6 +81,31 @@ public class CategoryController {
         }
     }
 
+    // ADMIN: Upload category image to Cloudinary
+    @PostMapping(
+            value = "/api/admin/categories/upload-image",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<?> uploadCategoryImage(
+            @RequestParam("file") MultipartFile file) {
+
+        try {
+            String imageUrl = categoryImageService.uploadImage(file);
+
+            return ResponseEntity.ok(
+                    Map.of("imageUrl", imageUrl)
+            );
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", e.getMessage()));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Image upload failed"));
+        }
+    }
+
     // ADMIN: Activate / Deactivate category
     @PatchMapping("/api/admin/categories/{id}/status")
     public ResponseEntity<?> updateStatus(
@@ -82,7 +117,10 @@ public class CategoryController {
 
             if (active == null) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("message", "Active status is required"));
+                        .body(Map.of(
+                                "message",
+                                "Active status is required"
+                        ));
             }
 
             return ResponseEntity.ok(
